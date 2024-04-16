@@ -85,7 +85,11 @@ def get_torch_device():
         if is_intel_xpu():
             return torch.device("xpu")
         else:
-            return torch.device(torch.cuda.current_device())
+            if torch.cuda.is_available():
+                return torch.device(torch.cuda.current_device())
+            else:
+                print("No CUDA device available. Using CPU instead.")
+                return torch.device("cpu")
 
 def get_total_memory(dev=None, torch_total_too=False):
     global directml_enabled
