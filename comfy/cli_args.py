@@ -117,10 +117,11 @@ parser.add_argument("--multi-user", action="store_true", help="Enables per-user 
 parser.add_argument("--verbose", action="store_true", help="Enables more debug prints.")
 
 
-if comfy.options.args_parsing:
-    args = parser.parse_args()
-else:
-    args = parser.parse_args([])
+# if comfy.options.args_parsing:
+#     args = parser.parse_args()
+# else:
+
+args = parser.parse_args([])
 
 if args.windows_standalone_build:
     args.auto_launch = True
