@@ -16,3 +16,7 @@ venv/
 !/web/extensions/core/
 /tests-ui/data/object_info.json
 /user/
+.DS_Store
+comfyui.log
+comfyui.prev.log
+comfyui.prev2.log 

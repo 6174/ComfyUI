@@ -1,3 +1,4 @@
+from typing import Any, Dict
 import comfy.options
 comfy.options.enable_args_parsing()
 
@@ -59,36 +60,15 @@ import logging
 if os.name == "nt":
     logging.getLogger("xformers").addFilter(lambda record: 'A matching Triton is not available' not in record.getMessage())
 
-if __name__ == "__main__":
-    if args.cuda_device is not None:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda_device)
-        logging.info("Set cuda device to: {}".format(args.cuda_device))
-
-    if args.deterministic:
-        if 'CUBLAS_WORKSPACE_CONFIG' not in os.environ:
-            os.environ['CUBLAS_WORKSPACE_CONFIG'] = ":4096:8"
-
-    import cuda_malloc
 
 import comfy.utils
 import yaml
 
 import execution
-import server
+import server as Server
 from server import BinaryEventTypes
 from nodes import init_custom_nodes
 import comfy.model_management
-
-def cuda_malloc_warning():
-    device = comfy.model_management.get_torch_device()
-    device_name = comfy.model_management.get_torch_device_name(device)
-    cuda_malloc_warning = False
-    if "cudaMallocAsync" in device_name:
-        for b in cuda_malloc.blacklist:
-            if b in device_name:
-                cuda_malloc_warning = True
-        if cuda_malloc_warning:
-            logging.warning("\nWARNING: this card most likely does not support cuda-malloc, if you get \"CUDA error\" please run ComfyUI with: --disable-cuda-malloc\n")
 
 def prompt_worker(q, server):
     e = execution.PromptExecutor(server)
@@ -187,7 +167,38 @@ def load_extra_path_config(yaml_path):
                 folder_paths.add_model_folder_path(x, full_path)
 
 
-if __name__ == "__main__":
+def run_main(options: Dict[str, Any]):
+    if options.get("output_directory", None):
+        args.output_directory = options["output_directory"]
+    if options.get("input_directory", None):
+        args.input_directory = options["input_directory"]
+    if options.get("temp_directory", None):
+        args.temp_directory = options["temp_directory"]
+    if options.get("server_address", None):
+        args.server_address = options["server_address"]
+    if options.get("client_id", None):
+        args.client_id = options["client_id"]
+
+    if args.cuda_device is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda_device)
+        logging.info("Set cuda device to: {}".format(args.cuda_device))
+
+    if args.deterministic:
+        if 'CUBLAS_WORKSPACE_CONFIG' not in os.environ:
+            os.environ['CUBLAS_WORKSPACE_CONFIG'] = ":4096:8"
+
+    import cuda_malloc
+    def cuda_malloc_warning():
+        device = comfy.model_management.get_torch_device()
+        device_name = comfy.model_management.get_torch_device_name(device)
+        cuda_malloc_warning = False
+        if "cudaMallocAsync" in device_name:
+            for b in cuda_malloc.blacklist:
+                if b in device_name:
+                    cuda_malloc_warning = True
+            if cuda_malloc_warning:
+                logging.warning("\nWARNING: this card most likely does not support cuda-malloc, if you get \"CUDA error\" please run ComfyUI with: --disable-cuda-malloc\n")
+
     if args.temp_directory:
         temp_dir = os.path.join(os.path.abspath(args.temp_directory), "temp")
         logging.info(f"Setting temp directory to: {temp_dir}")
@@ -203,7 +214,7 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    server = server.PromptServer(loop)
+    server = Server.PromptServer(loop)
     q = execution.PromptQueue(server)
 
     extra_model_paths_config_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extra_model_paths.yaml")
@@ -228,7 +239,7 @@ if __name__ == "__main__":
         logging.info(f"Setting output directory to: {output_dir}")
         folder_paths.set_output_directory(output_dir)
 
-    #These are the default folders that checkpoints, clip and vae models will be saved to when using CheckpointSave, etc.. nodes
+    # These are the default folders that checkpoints, clip and vae models will be saved to when using CheckpointSave, etc.. nodes
     folder_paths.add_model_folder_path("checkpoints", os.path.join(folder_paths.get_output_directory(), "checkpoints"))
     folder_paths.add_model_folder_path("clip", os.path.join(folder_paths.get_output_directory(), "clip"))
     folder_paths.add_model_folder_path("vae", os.path.join(folder_paths.get_output_directory(), "vae"))
