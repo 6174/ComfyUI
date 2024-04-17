@@ -23,6 +23,7 @@ import mimetypes
 from comfy.cli_args import args
 import comfy.utils
 import comfy.model_management
+import torch
 
 from app.user_manager import UserManager
 
@@ -447,7 +448,12 @@ class PromptServer():
 
         @routes.post("/prompt")
         async def post_prompt(request):
+            torch.cuda.empty_cache()
             logging.info("got prompt")
+            print("Is cuda avaliable in setup:", torch.cuda.is_available())
+            print("Cuda device count in setup:", torch.cuda.device_count())
+            print("cuda properties", torch.cuda.get_device_properties("cuda"))
+            
             resp_code = 200
             out_string = ""
             json_data =  await request.json()
