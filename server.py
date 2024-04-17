@@ -23,6 +23,7 @@ import mimetypes
 from comfy.cli_args import args
 import comfy.utils
 import comfy.model_management
+import torch
 
 from app.user_manager import UserManager
 
@@ -447,6 +448,7 @@ class PromptServer():
 
         @routes.post("/prompt")
         async def post_prompt(request):
+            torch.cuda.empty_cache()
             logging.info("got prompt")
             resp_code = 200
             out_string = ""
