@@ -1895,7 +1895,8 @@ def load_custom_nodes():
         for possible_module in possible_modules:
             module_path = os.path.join(custom_node_path, possible_module)
             if os.path.isfile(module_path) and os.path.splitext(module_path)[1] != ".py": continue
-            if module_path.endswith(".disabled"): continue
+            disabled_module_path = module_path + ".disabled"
+            if os.path.isfile(disabled_module_path): continue
             time_before = time.perf_counter()
             success = load_custom_node(module_path, base_node_names)
             node_import_times.append((time.perf_counter() - time_before, module_path, success))
