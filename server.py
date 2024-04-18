@@ -359,10 +359,10 @@ class PromptServer():
 
         @routes.get("/system_stats")
         async def get_queue(request):
-            device = comfy.model_management.get_torch_device()
-            device_name = comfy.model_management.get_torch_device_name(device)
-            vram_total, torch_vram_total = comfy.model_management.get_total_memory(device, torch_total_too=True)
-            vram_free, torch_vram_free = comfy.model_management.get_free_memory(device, torch_free_too=True)
+            # device = comfy.model_management.get_torch_device()
+            # device_name = comfy.model_management.get_torch_device_name(device)
+            # vram_total, torch_vram_total = comfy.model_management.get_total_memory(device, torch_total_too=True)
+            # vram_free, torch_vram_free = comfy.model_management.get_free_memory(device, torch_free_too=True)
             system_stats = {
                 "system": {
                     "os": os.name,
@@ -371,13 +371,13 @@ class PromptServer():
                 },
                 "devices": [
                     {
-                        "name": device_name,
-                        "type": device.type,
-                        "index": device.index,
-                        "vram_total": vram_total,
-                        "vram_free": vram_free,
-                        "torch_vram_total": torch_vram_total,
-                        "torch_vram_free": torch_vram_free,
+                        # "name": device_name,
+                        # "type": device.type,
+                        # "index": device.index,
+                        # "vram_total": vram_total,
+                        # "vram_free": vram_free,
+                        # "torch_vram_total": torch_vram_total,
+                        # "torch_vram_free": torch_vram_free,
                     }
                 ]
             }

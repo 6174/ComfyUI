@@ -227,7 +227,7 @@ def run_main(options: Dict[str, Any]):
 
     init_custom_nodes()
 
-    cuda_malloc_warning()
+    # cuda_malloc_warning()
 
     server.add_routes()
     hijack_progress(server)
