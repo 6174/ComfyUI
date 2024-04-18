@@ -225,7 +225,9 @@ def run_main(options: Dict[str, Any]):
         for config_path in itertools.chain(*args.extra_model_paths_config):
             load_extra_path_config(config_path)
 
+    start_time = time.time()
     init_custom_nodes()
+    print(" init custom nodes time cost ", time.time() - start_time)
 
     # # cuda_malloc_warning()
 
