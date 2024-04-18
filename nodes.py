@@ -27,7 +27,6 @@ import comfy.controlnet
 
 import comfy.clip_vision
 
-import comfy.model_management
 from comfy.cli_args import args
 
 import importlib
@@ -37,9 +36,12 @@ import latent_preview
 import node_helpers
 
 def before_node_execution():
+    import comfy.model_management
+
     comfy.model_management.throw_exception_if_processing_interrupted()
 
 def interrupt_processing(value=True):
+    import comfy.model_management
     comfy.model_management.interrupt_current_processing(value)
 
 MAX_RESOLUTION=16384
@@ -993,6 +995,8 @@ class GLIGENTextBoxApply:
 
 class EmptyLatentImage:
     def __init__(self):
+        import comfy.model_management
+
         self.device = comfy.model_management.intermediate_device()
 
     @classmethod
@@ -1041,7 +1045,7 @@ class LatentFromBatch:
         else:
             s["batch_index"] = samples["batch_index"][batch_index:batch_index + length]
         return (s,)
-    
+
 class RepeatLatentBatch:
     @classmethod
     def INPUT_TYPES(s):
