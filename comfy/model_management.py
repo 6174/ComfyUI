@@ -46,19 +46,19 @@ directml_enabled = False
 #     # torch_directml.disable_tiled_resources(True)
 #     lowvram_available = False #TODO: need to find a way to get free memory in directml before this can be enabled by default.
 
-try:
-    import intel_extension_for_pytorch as ipex
-    if torch.xpu.is_available():
-        xpu_available = True
-except:
-    pass
+# try:
+#     import intel_extension_for_pytorch as ipex
+#     if torch.xpu.is_available():
+#         xpu_available = True
+# except:
+#     pass
 
-try:
-    if torch.backends.mps.is_available():
-        cpu_state = CPUState.MPS
-        import torch.mps
-except:
-    pass
+# try:
+#     if torch.backends.mps.is_available():
+#         cpu_state = CPUState.MPS
+#         import torch.mps
+# except:
+#     pass
 
 if args.cpu:
     cpu_state = CPUState.CPU
