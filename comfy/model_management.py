@@ -34,17 +34,17 @@ if args.deterministic:
     torch.use_deterministic_algorithms(True, warn_only=True)
 
 directml_enabled = False
-if args.directml is not None:
-    import torch_directml
-    directml_enabled = True
-    device_index = args.directml
-    if device_index < 0:
-        directml_device = torch_directml.device()
-    else:
-        directml_device = torch_directml.device(device_index)
-    logging.info("Using directml with device: {}".format(torch_directml.device_name(device_index)))
-    # torch_directml.disable_tiled_resources(True)
-    lowvram_available = False #TODO: need to find a way to get free memory in directml before this can be enabled by default.
+# if args.directml is not None:
+#     import torch_directml
+#     directml_enabled = True
+#     device_index = args.directml
+#     if device_index < 0:
+#         directml_device = torch_directml.device()
+#     else:
+#         directml_device = torch_directml.device(device_index)
+#     logging.info("Using directml with device: {}".format(torch_directml.device_name(device_index)))
+#     # torch_directml.disable_tiled_resources(True)
+#     lowvram_available = False #TODO: need to find a way to get free memory in directml before this can be enabled by default.
 
 try:
     import intel_extension_for_pytorch as ipex
@@ -129,10 +129,10 @@ if not args.normalvram and not args.cpu:
         logging.warning("Trying to enable lowvram mode because your GPU seems to have 4GB or less. If you don't want this use: --normalvram")
         set_vram_to = VRAMState.LOW_VRAM
 
-try:
-    OOM_EXCEPTION = torch.cuda.OutOfMemoryError
-except:
-    OOM_EXCEPTION = Exception
+# try:
+#     OOM_EXCEPTION = torch.cuda.OutOfMemoryError
+# except:
+#     OOM_EXCEPTION = Exception
 
 XFORMERS_VERSION = ""
 XFORMERS_ENABLED_VAE = True
@@ -175,12 +175,13 @@ VAE_DTYPE = torch.float32
 
 try:
     if is_nvidia():
-        torch_version = torch.version.__version__
-        if int(torch_version[0]) >= 2:
-            if ENABLE_PYTORCH_ATTENTION == False and args.use_split_cross_attention == False and args.use_quad_cross_attention == False:
-                ENABLE_PYTORCH_ATTENTION = True
-            if torch.cuda.is_bf16_supported() and torch.cuda.get_device_properties(torch.cuda.current_device()).major >= 8:
-                VAE_DTYPE = torch.bfloat16
+        pass
+        # torch_version = torch.version.__version__
+        # if int(torch_version[0]) >= 2:
+        #     if ENABLE_PYTORCH_ATTENTION == False and args.use_split_cross_attention == False and args.use_quad_cross_attention == False:
+        #         ENABLE_PYTORCH_ATTENTION = True
+            # if torch.cuda.is_bf16_supported() and torch.cuda.get_device_properties(torch.cuda.current_device()).major >= 8:
+            #     VAE_DTYPE = torch.bfloat16
     if is_intel_xpu():
         if args.use_split_cross_attention == False and args.use_quad_cross_attention == False:
             ENABLE_PYTORCH_ATTENTION = True
@@ -201,10 +202,10 @@ elif args.fp32_vae:
     VAE_DTYPE = torch.float32
 
 
-if ENABLE_PYTORCH_ATTENTION:
-    torch.backends.cuda.enable_math_sdp(True)
-    torch.backends.cuda.enable_flash_sdp(True)
-    torch.backends.cuda.enable_mem_efficient_sdp(True)
+# if ENABLE_PYTORCH_ATTENTION:
+#     torch.backends.cuda.enable_math_sdp(True)
+#     torch.backends.cuda.enable_flash_sdp(True)
+#     torch.backends.cuda.enable_mem_efficient_sdp(True)
 
 if args.lowvram:
     set_vram_to = VRAMState.LOW_VRAM
@@ -257,12 +258,12 @@ def get_torch_device_name(device):
     else:
         return "CUDA {}: {}".format(device, torch.cuda.get_device_name(device))
 
-try:
-    logging.info("Device: {}".format(get_torch_device_name(get_torch_device())))
-except:
-    logging.warning("Could not pick default device.")
+# try:
+#     logging.info("Device: {}".format(get_torch_device_name(get_torch_device())))
+# except:
+#     logging.warning("Could not pick default device.")
 
-logging.info("VAE dtype: {}".format(VAE_DTYPE))
+# logging.info("VAE dtype: {}".format(VAE_DTYPE))
 
 current_loaded_models = []
 
