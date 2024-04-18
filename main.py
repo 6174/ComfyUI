@@ -168,17 +168,16 @@ def load_extra_path_config(yaml_path):
 
 
 def run_main(options: Dict[str, Any]):
-    return
-    # if options.get("output_directory", None):
-    #     args.output_directory = options["output_directory"]
-    # if options.get("input_directory", None):
-    #     args.input_directory = options["input_directory"]
-    # if options.get("temp_directory", None):
-    #     args.temp_directory = options["temp_directory"]
-    # if options.get("server_address", None):
-    #     args.server_address = options["server_address"]
-    # if options.get("client_id", None):
-    #     args.client_id = options["client_id"]
+    if options.get("output_directory", None):
+        args.output_directory = options["output_directory"]
+    if options.get("input_directory", None):
+        args.input_directory = options["input_directory"]
+    if options.get("temp_directory", None):
+        args.temp_directory = options["temp_directory"]
+    if options.get("server_address", None):
+        args.server_address = options["server_address"]
+    if options.get("client_id", None):
+        args.client_id = options["client_id"]
 
     # if args.cuda_device is not None:
     #     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda_device)
@@ -200,11 +199,11 @@ def run_main(options: Dict[str, Any]):
     #         if cuda_malloc_warning:
     #             logging.warning("\nWARNING: this card most likely does not support cuda-malloc, if you get \"CUDA error\" please run ComfyUI with: --disable-cuda-malloc\n")
 
-    # if args.temp_directory:
-    #     temp_dir = os.path.join(os.path.abspath(args.temp_directory), "temp")
-    #     logging.info(f"Setting temp directory to: {temp_dir}")
-    #     folder_paths.set_temp_directory(temp_dir)
-    # cleanup_temp()
+    if args.temp_directory:
+        temp_dir = os.path.join(os.path.abspath(args.temp_directory), "temp")
+        logging.info(f"Setting temp directory to: {temp_dir}")
+        folder_paths.set_temp_directory(temp_dir)
+    cleanup_temp()
 
     # if args.windows_standalone_build:
     #     try:
@@ -218,15 +217,15 @@ def run_main(options: Dict[str, Any]):
     # server = Server.PromptServer(loop)
     # q = execution.PromptQueue(server)
 
-    # extra_model_paths_config_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extra_model_paths.yaml")
-    # if os.path.isfile(extra_model_paths_config_path):
-    #     load_extra_path_config(extra_model_paths_config_path)
+    extra_model_paths_config_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extra_model_paths.yaml")
+    if os.path.isfile(extra_model_paths_config_path):
+        load_extra_path_config(extra_model_paths_config_path)
 
-    # if args.extra_model_paths_config:
-    #     for config_path in itertools.chain(*args.extra_model_paths_config):
-    #         load_extra_path_config(config_path)
+    if args.extra_model_paths_config:
+        for config_path in itertools.chain(*args.extra_model_paths_config):
+            load_extra_path_config(config_path)
 
-    # # init_custom_nodes()
+    init_custom_nodes()
 
     # # cuda_malloc_warning()
 
