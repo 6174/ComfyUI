@@ -5,6 +5,7 @@ from . import utils
 from . import sd1_clip
 from . import sd2_clip
 from . import sdxl_clip
+from . import sd3_clip
 
 from . import supported_models_base
 from . import latent_formats
@@ -63,6 +64,12 @@ class SD20(supported_models_base.BASE):
         "use_linear_in_transformer": True,
         "adm_in_channels": None,
         "use_temporal_attention": False,
+    }
+
+    unet_extra_config = {
+        "num_heads": -1,
+        "num_head_channels": 64,
+        "attn_precision": torch.float32,
     }
 
     latent_format = latent_formats.SD15
@@ -276,6 +283,12 @@ class SVD_img2vid(supported_models_base.BASE):
         "use_temporal_resblock": True
     }
 
+    unet_extra_config = {
+        "num_heads": -1,
+        "num_head_channels": 64,
+        "attn_precision": torch.float32,
+    }
+
     clip_vision_prefix = "conditioner.embedders.0.open_clip.model.visual."
 
     latent_format = latent_formats.SD15
@@ -476,6 +489,28 @@ class SDXL_instructpix2pix(SDXL):
     def get_model(self, state_dict, prefix="", device=None):
         return model_base.SDXL_instructpix2pix(self, model_type=self.model_type(state_dict, prefix), device=device)
 
-models = [Stable_Zero123, SD15_instructpix2pix, SD15, SD20, SD21UnclipL, SD21UnclipH, SDXL_instructpix2pix, SDXLRefiner, SDXL, SSD1B, KOALA_700M, KOALA_1B, Segmind_Vega, SD_X4Upscaler, Stable_Cascade_C, Stable_Cascade_B, SV3D_u, SV3D_p]
+class SD3(supported_models_base.BASE):
+    unet_config = {
+        "in_channels": 16,
+        "pos_embed_scaling_factor": None,
+    }
+
+    sampling_settings = {
+        "shift": 3.0,
+    }
+
+    unet_extra_config = {}
+    latent_format = latent_formats.SD3
+    text_encoder_key_prefix = ["text_encoders."] #TODO?
+
+    def get_model(self, state_dict, prefix="", device=None):
+        out = model_base.SD3(self, device=device)
+        return out
+
+    def clip_target(self):
+        return supported_models_base.ClipTarget(sd3_clip.SD3Tokenizer, sd3_clip.SD3ClipModel) #TODO?
+
+
+models = [Stable_Zero123, SD15_instructpix2pix, SD15, SD20, SD21UnclipL, SD21UnclipH, SDXL_instructpix2pix, SDXLRefiner, SDXL, SSD1B, KOALA_700M, KOALA_1B, Segmind_Vega, SD_X4Upscaler, Stable_Cascade_C, Stable_Cascade_B, SV3D_u, SV3D_p, SD3]
 
 models += [SVD_img2vid]
