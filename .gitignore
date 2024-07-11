@@ -9,6 +9,7 @@ __pycache__/
 !custom_nodes/example_node.py.example
 extra_model_paths.yaml
 /.vs
+.vscode/
 .idea/
 venv/
 /web/extensions/*
@@ -21,3 +22,4 @@ comfyui.log
 comfyui.prev.log
 comfyui.prev2.log
 .DS_Store
+*.log
