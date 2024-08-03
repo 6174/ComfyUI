@@ -204,7 +204,7 @@ class LoadAudio:
     def load(self, audio):
         audio_path = folder_paths.get_annotated_filepath(audio)
         waveform, sample_rate = torchaudio.load(audio_path)
-        audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
+        audio = {"waveform": waveform.unsqueeze(0), "audio_path": audio_path, "sample_rate": sample_rate}
         return (audio, )
 
     @classmethod
