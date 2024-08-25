@@ -23,5 +23,5 @@ comfyui.prev.log
 comfyui.prev2.log
 .DS_Store
 *.log
-*.log
 web_custom_versions/
+.DS_Store
