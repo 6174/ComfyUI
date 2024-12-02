@@ -145,7 +145,7 @@ total_ram = psutil.virtual_memory().total / (1024 * 1024)
 logging.info("Total VRAM {:0.0f} MB, total RAM {:0.0f} MB".format(total_vram, total_ram))
 
 try:
-    logging.info("pytorch version: {}".format(torch.version.__version__))
+    logging.info("pytorch version: {}".format(torch_version))
 except:
     pass
 
@@ -326,7 +326,7 @@ class LoadedModel:
                 self.model_unload()
                 raise e
 
-        if is_intel_xpu() and not args.disable_ipex_optimize and self.real_model is not None:
+        if is_intel_xpu() and not args.disable_ipex_optimize and 'ipex' in globals() and self.real_model is not None:
             with torch.no_grad():
                 self.real_model = ipex.optimize(self.real_model.eval(), inplace=True, graph_mode=True, concat_linear=True)
 
@@ -426,7 +426,7 @@ def free_memory(memory_required, device, keep_loaded=[]):
         shift_model = current_loaded_models[i]
         if shift_model.device == device:
             if shift_model not in keep_loaded:
-                can_unload.append((sys.getrefcount(shift_model.model), shift_model.model_memory(), i))
+                can_unload.append((-shift_model.model_offloaded_memory(), sys.getrefcount(shift_model.model), shift_model.model_memory(), i))
                 shift_model.currently_used = False
 
     for x in sorted(can_unload):
@@ -626,6 +626,12 @@ def maximum_vram_for_weights(device=None):
     return (get_total_memory(device) * 0.88 - minimum_inference_memory())
 
 def unet_dtype(device=None, model_params=0, supported_dtypes=[torch.float16, torch.bfloat16, torch.float32]):
+    if model_params < 0:
+        model_params = 1000000000000000000000
+    if args.fp32_unet:
+        return torch.float32
+    if args.fp64_unet:
+        return torch.float64
     if args.bf16_unet:
         return torch.bfloat16
     if args.fp16_unet:
@@ -645,6 +651,9 @@ def unet_dtype(device=None, model_params=0, supported_dtypes=[torch.float16, tor
         pass
 
     if fp8_dtype is not None:
+        if supports_fp8_compute(device): #if fp8 compute is supported the casting is most likely not expensive
+            return fp8_dtype
+
         free_model_memory = maximum_vram_for_weights(device)
         if model_params * 2 > free_model_memory:
             return fp8_dtype
@@ -669,7 +678,7 @@ def unet_dtype(device=None, model_params=0, supported_dtypes=[torch.float16, tor
 
 # None means no manual cast
 def unet_manual_cast(weight_dtype, inference_device, supported_dtypes=[torch.float16, torch.bfloat16, torch.float32]):
-    if weight_dtype == torch.float32:
+    if weight_dtype == torch.float32 or weight_dtype == torch.float64:
         return None
 
     fp16_supported = should_use_fp16(inference_device, prioritize_performance=False)
@@ -838,27 +847,21 @@ def force_channels_last():
     #TODO
     return False
 
+def cast_to(weight, dtype=None, device=None, non_blocking=False, copy=False):
+    if device is None or weight.device == device:
+        if not copy:
+            if dtype is None or weight.dtype == dtype:
+                return weight
+        return weight.to(dtype=dtype, copy=copy)
+
+    r = torch.empty_like(weight, dtype=dtype, device=device)
+    r.copy_(weight, non_blocking=non_blocking)
+    return r
+
 def cast_to_device(tensor, device, dtype, copy=False):
-    device_supports_cast = False
-    if tensor.dtype == torch.float32 or tensor.dtype == torch.float16:
-        device_supports_cast = True
-    elif tensor.dtype == torch.bfloat16:
-        if hasattr(device, 'type') and device.type.startswith("cuda"):
-            device_supports_cast = True
-        elif is_intel_xpu():
-            device_supports_cast = True
+    non_blocking = device_supports_non_blocking(device)
+    return cast_to(tensor, dtype=dtype, device=device, non_blocking=non_blocking, copy=copy)
 
-    non_blocking = device_should_use_non_blocking(device)
-
-    if device_supports_cast:
-        if copy:
-            if tensor.device == device:
-                return tensor.to(dtype, copy=copy, non_blocking=non_blocking)
-            return tensor.to(device, copy=copy, non_blocking=non_blocking).to(dtype, non_blocking=non_blocking)
-        else:
-            return tensor.to(device, non_blocking=non_blocking).to(dtype, non_blocking=non_blocking)
-    else:
-        return tensor.to(device, dtype, copy=copy, non_blocking=non_blocking)
 
 def xformers_enabled():
     global directml_enabled
@@ -897,7 +900,7 @@ def force_upcast_attention_dtype():
     upcast = args.force_upcast_attention
     try:
         macos_version = tuple(int(n) for n in platform.mac_ver()[0].split("."))
-        if (14, 5) <= macos_version < (14, 7):  # black image bug on recent versions of MacOS
+        if (14, 5) <= macos_version <= (15, 2):  # black image bug on recent versions of macOS
             upcast = True
     except:
         pass
@@ -1063,6 +1066,9 @@ def should_use_bf16(device=None, model_params=0, prioritize_performance=True, ma
     return False
 
 def supports_fp8_compute(device=None):
+    if not is_nvidia():
+        return False
+
     props = torch.cuda.get_device_properties(device)
     if props.major >= 9:
         return True
@@ -1070,6 +1076,14 @@ def supports_fp8_compute(device=None):
         return False
     if props.minor < 9:
         return False
+
+    if int(torch_version[0]) < 2 or (int(torch_version[0]) == 2 and int(torch_version[2]) < 3):
+        return False
+
+    if WINDOWS:
+        if (int(torch_version[0]) == 2 and int(torch_version[2]) < 4):
+            return False
+
     return True
 
 def soft_empty_cache(force=False):

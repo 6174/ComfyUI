@@ -28,7 +28,7 @@ import comfy.utils
 import comfy.float
 import comfy.model_management
 import comfy.lora
-from comfy.types import UnetWrapperFunction
+from comfy.comfy_types import UnetWrapperFunction
 
 def string_to_seed(data):
     crc = 0xFFFFFFFF
@@ -88,7 +88,36 @@ class LowVramPatch:
         self.key = key
         self.patches = patches
     def __call__(self, weight):
-        return comfy.lora.calculate_weight(self.patches[self.key], weight, self.key, intermediate_dtype=weight.dtype)
+        intermediate_dtype = weight.dtype
+        if intermediate_dtype not in [torch.float32, torch.float16, torch.bfloat16]: #intermediate_dtype has to be one that is supported in math ops
+            intermediate_dtype = torch.float32
+            return comfy.float.stochastic_rounding(comfy.lora.calculate_weight(self.patches[self.key], weight.to(intermediate_dtype), self.key, intermediate_dtype=intermediate_dtype), weight.dtype, seed=string_to_seed(self.key))
+
+        return comfy.lora.calculate_weight(self.patches[self.key], weight, self.key, intermediate_dtype=intermediate_dtype)
+
+def get_key_weight(model, key):
+    set_func = None
+    convert_func = None
+    op_keys = key.rsplit('.', 1)
+    if len(op_keys) < 2:
+        weight = comfy.utils.get_attr(model, key)
+    else:
+        op = comfy.utils.get_attr(model, op_keys[0])
+        try:
+            set_func = getattr(op, "set_{}".format(op_keys[1]))
+        except AttributeError:
+            pass
+
+        try:
+            convert_func = getattr(op, "convert_{}".format(op_keys[1]))
+        except AttributeError:
+            pass
+
+        weight = getattr(op, op_keys[1])
+        if convert_func is not None:
+            weight = comfy.utils.get_attr(model, key)
+
+    return weight, set_func, convert_func
 
 class ModelPatcher:
     def __init__(self, model, load_device, offload_device, size=0, weight_inplace_update=False):
@@ -283,17 +312,23 @@ class ModelPatcher:
         return list(p)
 
     def get_key_patches(self, filter_prefix=None):
-        comfy.model_management.unload_model_clones(self)
         model_sd = self.model_state_dict()
         p = {}
         for k in model_sd:
             if filter_prefix is not None:
                 if not k.startswith(filter_prefix):
                     continue
+            bk = self.backup.get(k, None)
+            weight, set_func, convert_func = get_key_weight(self.model, k)
+            if bk is not None:
+                weight = bk.weight
+            if convert_func is None:
+                convert_func = lambda a, **kwargs: a
+
             if k in self.patches:
-                p[k] = [model_sd[k]] + self.patches[k]
+                p[k] = [(weight, convert_func)] + self.patches[k]
             else:
-                p[k] = (model_sd[k],)
+                p[k] = [(weight, convert_func)]
         return p
 
     def model_state_dict(self, filter_prefix=None):
@@ -309,8 +344,7 @@ class ModelPatcher:
         if key not in self.patches:
             return
 
-        weight = comfy.utils.get_attr(self.model, key)
-
+        weight, set_func, convert_func = get_key_weight(self.model, key)
         inplace_update = self.weight_inplace_update or inplace_update
 
         if key not in self.backup:
@@ -320,27 +354,46 @@ class ModelPatcher:
             temp_weight = comfy.model_management.cast_to_device(weight, device_to, torch.float32, copy=True)
         else:
             temp_weight = weight.to(torch.float32, copy=True)
+        if convert_func is not None:
+            temp_weight = convert_func(temp_weight, inplace=True)
+
         out_weight = comfy.lora.calculate_weight(self.patches[key], temp_weight, key)
-        out_weight = comfy.float.stochastic_rounding(out_weight, weight.dtype, seed=string_to_seed(key))
-        if inplace_update:
-            comfy.utils.copy_to_param(self.model, key, out_weight)
+        if set_func is None:
+            out_weight = comfy.float.stochastic_rounding(out_weight, weight.dtype, seed=string_to_seed(key))
+            if inplace_update:
+                comfy.utils.copy_to_param(self.model, key, out_weight)
+            else:
+                comfy.utils.set_attr_param(self.model, key, out_weight)
         else:
-            comfy.utils.set_attr_param(self.model, key, out_weight)
+            set_func(out_weight, inplace_update=inplace_update, seed=string_to_seed(key))
+
+    def _load_list(self):
+        loading = []
+        for n, m in self.model.named_modules():
+            params = []
+            skip = False
+            for name, param in m.named_parameters(recurse=False):
+                params.append(name)
+            for name, param in m.named_parameters(recurse=True):
+                if name not in params:
+                    skip = True # skip random weights in non leaf modules
+                    break
+            if not skip and (hasattr(m, "comfy_cast_weights") or len(params) > 0):
+                loading.append((comfy.model_management.module_size(m), n, m, params))
+        return loading
 
     def load(self, device_to=None, lowvram_model_memory=0, force_patch_weights=False, full_load=False):
         mem_counter = 0
         patch_counter = 0
         lowvram_counter = 0
-        loading = []
-        for n, m in self.model.named_modules():
-            if hasattr(m, "comfy_cast_weights") or hasattr(m, "weight"):
-                loading.append((comfy.model_management.module_size(m), n, m))
+        loading = self._load_list()
 
         load_completely = []
         loading.sort(reverse=True)
         for x in loading:
             n = x[1]
             m = x[2]
+            params = x[3]
             module_mem = x[0]
 
             lowvram_weight = False
@@ -376,22 +429,22 @@ class ModelPatcher:
                     if m.comfy_cast_weights:
                         wipe_lowvram_weight(m)
 
-                if hasattr(m, "weight"):
+                if full_load or mem_counter + module_mem < lowvram_model_memory:
                     mem_counter += module_mem
-                    load_completely.append((module_mem, n, m))
+                    load_completely.append((module_mem, n, m, params))
 
         load_completely.sort(reverse=True)
         for x in load_completely:
             n = x[1]
             m = x[2]
-            weight_key = "{}.weight".format(n)
-            bias_key = "{}.bias".format(n)
+            params = x[3]
             if hasattr(m, "comfy_patched_weights"):
                 if m.comfy_patched_weights == True:
                     continue
 
-            self.patch_weight_to_device(weight_key, device_to=device_to)
-            self.patch_weight_to_device(bias_key, device_to=device_to)
+            for param in params:
+                self.patch_weight_to_device("{}.{}".format(n, param), device_to=device_to)
+
             logging.debug("lowvram: loaded module regularly {} {}".format(n, m))
             m.comfy_patched_weights = True
 
@@ -465,14 +518,7 @@ class ModelPatcher:
     def partially_unload(self, device_to, memory_to_free=0):
         memory_freed = 0
         patch_counter = 0
-        unload_list = []
-
-        for n, m in self.model.named_modules():
-            shift_lowvram = False
-            if hasattr(m, "comfy_cast_weights"):
-                module_mem = comfy.model_management.module_size(m)
-                unload_list.append((module_mem, n, m))
-
+        unload_list = self._load_list()
         unload_list.sort()
         for unload in unload_list:
             if memory_to_free < memory_freed:
@@ -480,32 +526,42 @@ class ModelPatcher:
             module_mem = unload[0]
             n = unload[1]
             m = unload[2]
-            weight_key = "{}.weight".format(n)
-            bias_key = "{}.bias".format(n)
+            params = unload[3]
 
+            lowvram_possible = hasattr(m, "comfy_cast_weights")
             if hasattr(m, "comfy_patched_weights") and m.comfy_patched_weights == True:
-                for key in [weight_key, bias_key]:
+                move_weight = True
+                for param in params:
+                    key = "{}.{}".format(n, param)
                     bk = self.backup.get(key, None)
                     if bk is not None:
+                        if not lowvram_possible:
+                            move_weight = False
+                            break
+
                         if bk.inplace_update:
                             comfy.utils.copy_to_param(self.model, key, bk.weight)
                         else:
                             comfy.utils.set_attr_param(self.model, key, bk.weight)
                         self.backup.pop(key)
 
-                m.to(device_to)
-                if weight_key in self.patches:
-                    m.weight_function = LowVramPatch(weight_key, self.patches)
-                    patch_counter += 1
-                if bias_key in self.patches:
-                    m.bias_function = LowVramPatch(bias_key, self.patches)
-                    patch_counter += 1
+                weight_key = "{}.weight".format(n)
+                bias_key = "{}.bias".format(n)
+                if move_weight:
+                    m.to(device_to)
+                    if lowvram_possible:
+                        if weight_key in self.patches:
+                            m.weight_function = LowVramPatch(weight_key, self.patches)
+                            patch_counter += 1
+                        if bias_key in self.patches:
+                            m.bias_function = LowVramPatch(bias_key, self.patches)
+                            patch_counter += 1
 
-                m.prev_comfy_cast_weights = m.comfy_cast_weights
-                m.comfy_cast_weights = True
-                m.comfy_patched_weights = False
-                memory_freed += module_mem
-                logging.debug("freed {}".format(n))
+                        m.prev_comfy_cast_weights = m.comfy_cast_weights
+                        m.comfy_cast_weights = True
+                    m.comfy_patched_weights = False
+                    memory_freed += module_mem
+                    logging.debug("freed {}".format(n))
 
         self.model.model_lowvram = True
         self.model.lowvram_patch_counter += patch_counter
